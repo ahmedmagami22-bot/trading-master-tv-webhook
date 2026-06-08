@@ -65,3 +65,17 @@ alter table public.tv_trade_events enable row level security;
 
 The frontend no longer needs manual editing of `public/index.html` or `public/login.html`.
 It reads `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `/api/config`, which uses Vercel Environment Variables.
+
+
+## V4.0.2 Login API Fix
+
+This version fixes browser login issues by using:
+- `/api/login-server`
+
+The browser no longer calls Supabase Auth directly.  
+It calls Vercel first, and Vercel calls Supabase Auth server-side.
+
+Test after deploy:
+- `/api/config`
+- `/api/auth-debug`
+- `/api/health`

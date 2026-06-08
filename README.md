@@ -59,3 +59,9 @@ alter table public.tv_trade_events enable row level security;
 6. Select this script and choose `Any alert() function call`.
 7. Webhook URL: `https://YOUR-VERCEL-PROJECT.vercel.app/api/tv-webhook`
 8. Message can be anything because Pine sends JSON from `alert()` automatically.
+
+
+## V4.0.1 update
+
+The frontend no longer needs manual editing of `public/index.html` or `public/login.html`.
+It reads `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `/api/config`, which uses Vercel Environment Variables.

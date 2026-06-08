@@ -84,3 +84,11 @@ Test after deploy:
 ## V4.0.3 No Login Test Mode
 
 Login is temporarily disabled to complete and test the TradingView Webhook flow first. Open `/` directly. `/login.html` redirects to the dashboard.
+
+
+
+## V4.0.4 Display Fix
+
+Fixed RTL display issue for `Wins / Losses`.
+Arabic RTL rendering could visually flip `1 / 0` into `0 / 1`.
+The dashboard now forces stat numbers to render LTR.

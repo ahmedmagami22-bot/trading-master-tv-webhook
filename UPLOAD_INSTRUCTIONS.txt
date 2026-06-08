@@ -1,0 +1,23 @@
+GitHub upload instructions:
+1) Extract this ZIP.
+2) Open the extracted folder.
+3) Select these items together:
+   api
+   public
+   pine
+   package.json
+   vercel.json
+   README.md
+   SETUP_TV_WEBHOOK.md
+   UPLOAD_INSTRUCTIONS.txt
+4) Drag them into GitHub Upload files page.
+5) Do NOT upload the ZIP file itself.
+6) Do NOT drag the parent folder itself; drag the contents listed above.
+Expected GitHub root:
+api/
+public/
+pine/
+package.json
+vercel.json
+README.md
+SETUP_TV_WEBHOOK.md

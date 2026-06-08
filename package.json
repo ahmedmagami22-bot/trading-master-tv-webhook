@@ -1,0 +1,9 @@
+{
+  "name": "trading-master-tv-webhook-v400",
+  "version": "4.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}

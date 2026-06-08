@@ -1,0 +1,158 @@
+//@version=5
+indicator("Trading Master V4 Signal Quality Engine", overlay=true, max_labels_count=500, max_lines_count=500)
+
+secret = input.string("CHANGE_ME", "Webhook Secret")
+minQuality = input.int(80, "Minimum Quality Score", minval=50, maxval=100)
+atrLen = input.int(14, "ATR Length")
+riskAtr = input.float(1.2, "SL ATR Multiplier", step=0.1)
+tp1R = input.float(1.0, "TP1 R", step=0.1)
+tp2R = input.float(1.6, "TP2 R", step=0.1)
+tp3R = input.float(2.4, "TP3 R", step=0.1)
+emaFastLen = input.int(20, "EMA Fast")
+emaMidLen = input.int(50, "EMA Mid")
+emaSlowLen = input.int(200, "EMA Slow")
+rsiLen = input.int(14, "RSI")
+stochLen = input.int(14, "Stochastic")
+bbLen = input.int(20, "BB Length")
+bbMult = input.float(2.0, "BB Mult", step=0.1)
+
+emaFast = ta.ema(close, emaFastLen)
+emaMid = ta.ema(close, emaMidLen)
+emaSlow = ta.ema(close, emaSlowLen)
+rsi = ta.rsi(close, rsiLen)
+atr = ta.atr(atrLen)
+[macdLine, signalLine, histLine] = ta.macd(close, 12, 26, 9)
+k = ta.stoch(high, low, close, stochLen)
+d = ta.sma(k, 3)
+bbBasis = ta.sma(close, bbLen)
+bbDev = bbMult * ta.stdev(close, bbLen)
+bbUpper = bbBasis + bbDev
+bbLower = bbBasis - bbDev
+bbWidth = (bbUpper - bbLower) / bbBasis
+
+swingHigh = ta.highest(high, 10)[1]
+swingLow = ta.lowest(low, 10)[1]
+bosUp = close > swingHigh
+bosDown = close < swingLow
+bullFvg = low > high[2]
+bearFvg = high < low[2]
+sweepLow = low < swingLow and close > swingLow
+sweepHigh = high > swingHigh and close < swingHigh
+trendUp = close > emaSlow and emaFast > emaMid and emaMid > emaSlow
+trendDown = close < emaSlow and emaFast < emaMid and emaMid < emaSlow
+squeeze = bbWidth < ta.lowest(bbWidth, 80)[1] * 1.25
+sideway = not trendUp and not trendDown
+marketRegime = trendUp ? "Trend Up" : trendDown ? "Trend Down" : squeeze ? "Squeeze" : "Sideway"
+impulseUp = trendUp and histLine > 0 and close > emaFast
+impulseDown = trendDown and histLine < 0 and close < emaFast
+corrective = (trendUp and close < emaFast and close > emaMid) or (trendDown and close > emaFast and close < emaMid)
+wavePersonality = impulseUp ? "Bullish Impulse" : impulseDown ? "Bearish Impulse" : corrective ? "Corrective Wave" : sideway ? "Sideway Wave" : "Neutral Wave"
+
+trendBuy = trendUp and (ta.crossover(close, emaFast) or bullFvg or bosUp) and histLine > histLine[1] and rsi > 45 and rsi < 72
+trendSell = trendDown and (ta.crossunder(close, emaFast) or bearFvg or bosDown) and histLine < histLine[1] and rsi < 55 and rsi > 28
+sideBuy = sideway and (low <= bbLower or sweepLow) and rsi < 42 and ta.crossover(k,d)
+sideSell = sideway and (high >= bbUpper or sweepHigh) and rsi > 58 and ta.crossunder(k,d)
+squeezeBuy = squeeze and bosUp and close > bbUpper and (bullFvg or histLine > 0)
+squeezeSell = squeeze and bosDown and close < bbLower and (bearFvg or histLine < 0)
+buyRaw = trendBuy or sideBuy or squeezeBuy
+sellRaw = trendSell or sideSell or squeezeSell
+strategyUsed = squeezeBuy or squeezeSell ? "Squeeze Breakout" : trendBuy or trendSell ? "Trend Quality" : sideBuy or sideSell ? "Sideway Reversal" : "Watch"
+scoreTrend = (trendBuy or trendSell) ? 20 : (sideway ? 10 : 0)
+scoreWave = ((buyRaw and (impulseUp or corrective or sideway)) or (sellRaw and (impulseDown or corrective or sideway))) ? 20 : 0
+scoreSMC = ((buyRaw and (bosUp or bullFvg or sweepLow)) or (sellRaw and (bosDown or bearFvg or sweepHigh))) ? 20 : 0
+scoreOsc = ((buyRaw and rsi > 35 and rsi < 72) or (sellRaw and rsi < 65 and rsi > 28)) ? 15 : 0
+scoreFib = 10
+scoreRR = 15
+quality = scoreTrend + scoreWave + scoreSMC + scoreOsc + scoreFib + scoreRR
+validBuy = buyRaw and quality >= minQuality
+validSell = sellRaw and quality >= minQuality
+
+var bool inTrade = false
+var string tradeId = ""
+var string sig = ""
+var float entry = na
+var float sl = na
+var float tp1 = na
+var float tp2 = na
+var float tp3 = na
+var bool tp1Hit = false
+var bool tp2Hit = false
+var bool tp3Hit = false
+var bool slToEntry = false
+
+pipValue(priceDiff) => math.round(math.abs(priceDiff) * 10)
+
+sendEvent(eventType, pips, reasonText) =>
+    eventKey = tradeId + "-" + eventType + "-" + str.tostring(time)
+    msg = '{' + '"secret":"' + secret + '",' + '"event_key":"' + eventKey + '",' + '"trade_id":"' + tradeId + '",' + '"event_type":"' + eventType + '",' + '"symbol":"XAUUSD",' + '"tf":"' + timeframe.period + '",' + '"sig":"' + sig + '",' + '"entry":' + str.tostring(entry) + ',' + '"sl":' + str.tostring(sl) + ',' + '"tp1":' + str.tostring(tp1) + ',' + '"tp2":' + str.tostring(tp2) + ',' + '"tp3":' + str.tostring(tp3) + ',' + '"pips":' + str.tostring(pips) + ',' + '"quality":' + str.tostring(quality) + ',' + '"strategy":"' + strategyUsed + '",' + '"market_regime":"' + marketRegime + '",' + '"wave_personality":"' + wavePersonality + '",' + '"reason":"' + reasonText + '",' + '"time":' + str.tostring(time) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+if not inTrade and (validBuy or validSell)
+    inTrade := true
+    sig := validBuy ? "BUY" : "SELL"
+    tradeId := syminfo.ticker + "-" + timeframe.period + "-" + str.tostring(time)
+    entry := close
+    risk = atr * riskAtr
+    sl := sig == "BUY" ? entry - risk : entry + risk
+    tp1 := sig == "BUY" ? entry + risk * tp1R : entry - risk * tp1R
+    tp2 := sig == "BUY" ? entry + risk * tp2R : entry - risk * tp2R
+    tp3 := sig == "BUY" ? entry + risk * tp3R : entry - risk * tp3R
+    tp1Hit := false
+    tp2Hit := false
+    tp3Hit := false
+    slToEntry := false
+    reason = "Accepted quality signal. " + strategyUsed + " | " + marketRegime + " | " + wavePersonality
+    sendEvent("NEW_SIGNAL", 0, reason)
+    label.new(bar_index, close, sig + " Q:" + str.tostring(quality), style=sig=="BUY"?label.style_label_up:label.style_label_down, color=sig=="BUY"?color.new(color.green,0):color.new(color.red,0), textcolor=color.white)
+
+if inTrade
+    activeSL = slToEntry ? entry : sl
+    if sig == "BUY"
+        if not tp1Hit and high >= tp1
+            tp1Hit := true
+            sendEvent("TP1", pipValue(tp1 - entry), "TP1 hit. Part 1 closed.")
+        if not tp2Hit and high >= tp2
+            tp2Hit := true
+            slToEntry := true
+            sendEvent("TP2", pipValue(tp2 - entry), "TP2 hit. SL moved to Entry.")
+        if not tp3Hit and high >= tp3
+            tp3Hit := true
+            sendEvent("TP3", pipValue(tp3 - entry), "TP3 hit. Trade fully closed as win.")
+            inTrade := false
+        if inTrade and low <= activeSL
+            if slToEntry
+                sendEvent("BE_STOP", 0, "Break-even stop hit after TP2.")
+            else
+                lossPips = -pipValue(entry - sl) * 3
+                sendEvent("SL", lossPips, "Stop Loss hit before TP2.")
+            inTrade := false
+    if sig == "SELL"
+        if not tp1Hit and low <= tp1
+            tp1Hit := true
+            sendEvent("TP1", pipValue(entry - tp1), "TP1 hit. Part 1 closed.")
+        if not tp2Hit and low <= tp2
+            tp2Hit := true
+            slToEntry := true
+            sendEvent("TP2", pipValue(entry - tp2), "TP2 hit. SL moved to Entry.")
+        if not tp3Hit and low <= tp3
+            tp3Hit := true
+            sendEvent("TP3", pipValue(entry - tp3), "TP3 hit. Trade fully closed as win.")
+            inTrade := false
+        if inTrade and high >= activeSL
+            if slToEntry
+                sendEvent("BE_STOP", 0, "Break-even stop hit after TP2.")
+            else
+                lossPips = -pipValue(sl - entry) * 3
+                sendEvent("SL", lossPips, "Stop Loss hit before TP2.")
+            inTrade := false
+
+plot(emaFast, "EMA Fast", color=color.new(color.teal, 0))
+plot(emaMid, "EMA Mid", color=color.new(color.orange, 0))
+plot(emaSlow, "EMA Slow", color=color.new(color.gray, 0))
+plot(bbUpper, "BB Upper", color=color.new(color.blue, 60))
+plot(bbLower, "BB Lower", color=color.new(color.blue, 60))
+plot(inTrade ? entry : na, "Entry", color=color.new(color.white,0), linewidth=2, style=plot.style_linebr)
+plot(inTrade ? sl : na, "SL", color=color.new(color.red,0), linewidth=2, style=plot.style_linebr)
+plot(inTrade ? tp1 : na, "TP1", color=color.new(color.green,0), style=plot.style_linebr)
+plot(inTrade ? tp2 : na, "TP2", color=color.new(color.green,0), style=plot.style_linebr)
+plot(inTrade ? tp3 : na, "TP3", color=color.new(color.green,0), style=plot.style_linebr)

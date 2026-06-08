@@ -79,3 +79,8 @@ Test after deploy:
 - `/api/config`
 - `/api/auth-debug`
 - `/api/health`
+
+
+## V4.0.3 No Login Test Mode
+
+Login is temporarily disabled to complete and test the TradingView Webhook flow first. Open `/` directly. `/login.html` redirects to the dashboard.
